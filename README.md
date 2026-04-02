@@ -4,4 +4,4 @@
 - Get password
 - Store in file (JSON)
 
-Note: encryption coming in upcoming versions
+```Note: encryption coming in upcoming versions```

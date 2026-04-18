@@ -27,13 +27,29 @@
 - [x] `totp-add <site> <secret>` — store a TOTP secret for an entry
 - [x] `totp <site> [user]` — generate and copy current TOTP code
 
-## v4 (ideas)
-- [ ] Interactive TUI mode (browse/search entries without re-entering master password)
-- [ ] Vault backup to encrypted file (portable, restorable on another machine)
-- [ ] Browser extension or HTTP API for autofill
-- [ ] Sync across devices (encrypted cloud storage)
-- [ ] Password strength audit (flag weak/reused passwords)
+## v4 (done) — code quality
+- [x] Split `main.go` into `crypto.go`, `store.go`, `cmd.go`
+- [x] Rename one-letter types/funcs (`E`/`ld`/`sv` → `Entry`/`loadVault`/`saveVault`)
+- [x] Tests for encrypt/decrypt round-trip, wrong-key/corruption rejection, and key derivation
+- [x] Vault format versioning (`Vault{Version, Entries}` envelope) with legacy v3 array fallback
+- [x] Atomic writes (`tmp + rename`) so a crash mid-save can't corrupt the vault
+
+## v5 (planned) — security hardening
+- [ ] Auto-lock / re-prompt master password on idle
+- [ ] In-memory key zeroization after use
+- [ ] Password strength meter + audit (flag weak/reused passwords)
+- [ ] Offline HIBP k-anonymity breach check
+- [ ] Backup rotation (`data.json.bak`) on every save
+- [ ] Don't accept `pass` as a CLI arg for `add` — prompt hidden (shell history leaks it)
 - [ ] Expiry reminders (flag passwords older than N days)
+
+## v6 (planned) — usability
+- [ ] Interactive TUI / REPL mode (browse/search without re-entering master password)
+- [ ] Tags / categories and `list --tag work`
+- [ ] Per-entry `notes` and `url` fields
+- [ ] Encrypted vault backup file (portable, restorable on another machine)
+- [ ] Optional Git-backed sync (encrypted blob is safe to push)
+- [ ] Browser extension or local HTTP API for autofill
 
 ## Notes
 

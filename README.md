@@ -8,12 +8,12 @@ A minimal CLI password manager written in Go. All passwords are encrypted with A
 
 **Run without building:**
 ```bash
-go run main.go <command>
+go run ./app <command>
 ```
 
 **Or build once and use the binary:**
 ```bash
-go build -o passman.exe .
+go build -o passman.exe ./app
 ./passman.exe <command>
 ```
 

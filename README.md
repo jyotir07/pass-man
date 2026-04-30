@@ -25,11 +25,14 @@ The first time you run any command (except `gen`), a `.salt` file is created aut
 
 ### `add` — Save a password
 ```
-passman.exe add <site> <user> <password>
+passman.exe add <site> <user>
 ```
+The password is prompted hidden (with confirmation), so it never lands in your shell history or `ps` output.
 ```
-$ ./passman.exe add github jyotir myPass123
+$ ./passman.exe add github jyotir
 Master password:
+Password:
+Confirm password:
 added
 ```
 

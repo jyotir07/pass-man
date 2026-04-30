@@ -81,7 +81,7 @@ func copyAndWaitClear(text string) {
 
 func usage() {
 	fmt.Println("commands:")
-	fmt.Println("  add <site> <user> <pass>     — save a password")
+	fmt.Println("  add <site> <user>            — save a password (prompted hidden)")
 	fmt.Println("  get <site> [user]            — copy password to clipboard")
 	fmt.Println("  list                         — show all sites")
 	fmt.Println("  delete <site> [user]         — remove an entry")
@@ -106,11 +106,21 @@ func saveOrDie(v *Vault, key []byte) {
 func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 	switch cmd {
 	case "add":
-		if len(args) < 3 {
-			fmt.Println("usage: add <site> <user> <pass>")
+		if len(args) < 2 {
+			fmt.Println("usage: add <site> <user>")
 			return
 		}
-		v.Entries = append(v.Entries, Entry{Site: args[0], User: args[1], Pass: args[2]})
+		newPass := promptPass("Password: ")
+		if len(newPass) == 0 {
+			fmt.Println("password cannot be empty")
+			return
+		}
+		confirm := promptPass("Confirm password: ")
+		if string(newPass) != string(confirm) {
+			fmt.Println("passwords do not match")
+			return
+		}
+		v.Entries = append(v.Entries, Entry{Site: args[0], User: args[1], Pass: string(newPass)})
 		saveOrDie(v, key)
 		fmt.Println("added")
 

@@ -40,7 +40,7 @@
 - [ ] Password strength meter + audit (flag weak/reused passwords)
 - [ ] Offline HIBP k-anonymity breach check
 - [ ] Backup rotation (`data.json.bak`) on every save
-- [ ] Don't accept `pass` as a CLI arg for `add` — prompt hidden (shell history leaks it)
+- [x] Don't accept `pass` as a CLI arg for `add` — prompt hidden (shell history leaks it)
 - [ ] Expiry reminders (flag passwords older than N days)
 
 ## v6 (planned) — usability

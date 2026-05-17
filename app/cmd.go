@@ -245,6 +245,7 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 		idx := disambiguate(matches, args[0])
 		target := matches[idx]
 		newPass := promptPass("New password: ")
+		defer zeroize(newPass)
 		if len(newPass) == 0 {
 			fmt.Println("password cannot be empty")
 			return

@@ -79,3 +79,11 @@ func genPass(length int) string {
 	}
 	return string(b)
 }
+
+// zeroize overwrites a byte slice with zeros so the secret can't be recovered
+// from a memory dump after the program is done with it.
+func zeroize(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}

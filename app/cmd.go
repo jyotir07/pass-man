@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,11 @@ import (
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/term"
 )
+
+// idleTimeout bounds how long an interactive prompt can sit waiting for input.
+// If exceeded, the program treats the session as abandoned and exits — the
+// caller's deferred zeroize wipes the key on the way out.
+const idleTimeout = 60 * time.Second
 
 func promptPass(label string) []byte {
 	fmt.Print(label)
@@ -45,8 +51,31 @@ func disambiguate(matches []Entry, site string) int {
 		fmt.Printf("  [%d] %s\n", i+1, e.User)
 	}
 	fmt.Print("pick one (number): ")
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
+
+	type result struct {
+		line string
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadString('\n')
+		ch <- result{line, err}
+	}()
+
+	var input string
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			fmt.Println("read failed")
+			os.Exit(1)
+		}
+		input = r.line
+	case <-time.After(idleTimeout):
+		fmt.Println("\nidle timeout — session locked, re-run the command")
+		os.Exit(1)
+	}
+
 	idx, err := strconv.Atoi(strings.TrimSpace(input))
 	if err != nil || idx < 1 || idx > len(matches) {
 		fmt.Println("invalid choice")
@@ -120,7 +149,11 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			fmt.Println("passwords do not match")
 			return
 		}
-		v.Entries = append(v.Entries, Entry{Site: args[0], User: args[1], Pass: string(newPass)})
+		now := time.Now().Unix()
+		v.Entries = append(v.Entries, Entry{
+			Site: args[0], User: args[1], Pass: string(newPass),
+			Created: now, Updated: now,
+		})
 		saveOrDie(v, key)
 		fmt.Println("added")
 
@@ -204,6 +237,7 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 		for i, e := range v.Entries {
 			if e.Site == target.Site && e.User == target.User {
 				v.Entries[i].Pass = string(newPass)
+				v.Entries[i].Updated = time.Now().Unix()
 				break
 			}
 		}

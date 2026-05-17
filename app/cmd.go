@@ -112,7 +112,7 @@ func usage() {
 	fmt.Println("commands:")
 	fmt.Println("  add <site> <user>            — save a password (prompted hidden)")
 	fmt.Println("  get <site> [user]            — copy password to clipboard")
-	fmt.Println("  list                         — show all sites")
+	fmt.Println("  list [--age]                 — show all sites (optionally with age)")
 	fmt.Println("  delete <site> [user]         — remove an entry")
 	fmt.Println("  update <site> [user]         — change password for an entry")
 	fmt.Println("  search <query>               — find entries by substring")
@@ -123,6 +123,9 @@ func usage() {
 	fmt.Println("  totp-add <site> <secret>     — store a TOTP secret for a site")
 	fmt.Println("  totp <site> [user]           — generate current TOTP code")
 	fmt.Println("  change-master                — change master password")
+	fmt.Println("  audit                        — flag weak and reused passwords")
+	fmt.Println("  breach-check                 — check passwords against HIBP (k-anonymity)")
+	fmt.Println("  expiry [days]                — flag passwords older than N days (default 365)")
 }
 
 func saveOrDie(v *Vault, key []byte) {
@@ -140,11 +143,13 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			return
 		}
 		newPass := promptPass("Password: ")
+		defer zeroize(newPass)
 		if len(newPass) == 0 {
 			fmt.Println("password cannot be empty")
 			return
 		}
 		confirm := promptPass("Confirm password: ")
+		defer zeroize(confirm)
 		if string(newPass) != string(confirm) {
 			fmt.Println("passwords do not match")
 			return

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,11 @@ import (
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/term"
 )
+
+// idleTimeout bounds how long an interactive prompt can sit waiting for input.
+// If exceeded, the program treats the session as abandoned and exits — the
+// caller's deferred zeroize wipes the key on the way out.
+const idleTimeout = 60 * time.Second
 
 func promptPass(label string) []byte {
 	fmt.Print(label)
@@ -45,8 +51,31 @@ func disambiguate(matches []Entry, site string) int {
 		fmt.Printf("  [%d] %s\n", i+1, e.User)
 	}
 	fmt.Print("pick one (number): ")
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
+
+	type result struct {
+		line string
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadString('\n')
+		ch <- result{line, err}
+	}()
+
+	var input string
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			fmt.Println("read failed")
+			os.Exit(1)
+		}
+		input = r.line
+	case <-time.After(idleTimeout):
+		fmt.Println("\nidle timeout — session locked, re-run the command")
+		os.Exit(1)
+	}
+
 	idx, err := strconv.Atoi(strings.TrimSpace(input))
 	if err != nil || idx < 1 || idx > len(matches) {
 		fmt.Println("invalid choice")
@@ -83,7 +112,7 @@ func usage() {
 	fmt.Println("commands:")
 	fmt.Println("  add <site> <user>            — save a password (prompted hidden)")
 	fmt.Println("  get <site> [user]            — copy password to clipboard")
-	fmt.Println("  list                         — show all sites")
+	fmt.Println("  list [--age]                 — show all sites (optionally with age)")
 	fmt.Println("  delete <site> [user]         — remove an entry")
 	fmt.Println("  update <site> [user]         — change password for an entry")
 	fmt.Println("  search <query>               — find entries by substring")
@@ -94,6 +123,9 @@ func usage() {
 	fmt.Println("  totp-add <site> <secret>     — store a TOTP secret for a site")
 	fmt.Println("  totp <site> [user]           — generate current TOTP code")
 	fmt.Println("  change-master                — change master password")
+	fmt.Println("  audit                        — flag weak and reused passwords")
+	fmt.Println("  breach-check                 — check passwords against HIBP (k-anonymity)")
+	fmt.Println("  expiry [days]                — flag passwords older than N days (default 365)")
 }
 
 func saveOrDie(v *Vault, key []byte) {
@@ -111,16 +143,22 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			return
 		}
 		newPass := promptPass("Password: ")
+		defer zeroize(newPass)
 		if len(newPass) == 0 {
 			fmt.Println("password cannot be empty")
 			return
 		}
 		confirm := promptPass("Confirm password: ")
+		defer zeroize(confirm)
 		if string(newPass) != string(confirm) {
 			fmt.Println("passwords do not match")
 			return
 		}
-		v.Entries = append(v.Entries, Entry{Site: args[0], User: args[1], Pass: string(newPass)})
+		now := time.Now().Unix()
+		v.Entries = append(v.Entries, Entry{
+			Site: args[0], User: args[1], Pass: string(newPass),
+			Created: now, Updated: now,
+		})
 		saveOrDie(v, key)
 		fmt.Println("added")
 
@@ -147,8 +185,18 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			fmt.Println("no entries")
 			return
 		}
+		showAge := len(args) >= 1 && args[0] == "--age"
 		for _, e := range v.Entries {
-			fmt.Printf("  %-20s %s\n", e.Site, e.User)
+			if showAge {
+				age := entryAgeDays(e)
+				ageStr := "unknown"
+				if age >= 0 {
+					ageStr = fmt.Sprintf("%dd", age)
+				}
+				fmt.Printf("  %-20s %-20s %s\n", e.Site, e.User, ageStr)
+			} else {
+				fmt.Printf("  %-20s %s\n", e.Site, e.User)
+			}
 		}
 
 	case "delete":
@@ -197,6 +245,7 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 		idx := disambiguate(matches, args[0])
 		target := matches[idx]
 		newPass := promptPass("New password: ")
+		defer zeroize(newPass)
 		if len(newPass) == 0 {
 			fmt.Println("password cannot be empty")
 			return
@@ -204,6 +253,7 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 		for i, e := range v.Entries {
 			if e.Site == target.Site && e.User == target.User {
 				v.Entries[i].Pass = string(newPass)
+				v.Entries[i].Updated = time.Now().Unix()
 				break
 			}
 		}
@@ -240,7 +290,11 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			}
 		}
 		pw := genPass(length)
-		v.Entries = append(v.Entries, Entry{Site: args[0], User: args[1], Pass: pw})
+		now := time.Now().Unix()
+		v.Entries = append(v.Entries, Entry{
+			Site: args[0], User: args[1], Pass: pw,
+			Created: now, Updated: now,
+		})
 		saveOrDie(v, key)
 		fmt.Printf("generated and saved (%d chars)\n", length)
 		copyAndWaitClear(pw)
@@ -292,6 +346,15 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			if err := json.Unmarshal(raw, &imported); err != nil {
 				fmt.Printf("invalid JSON: %s\n", err)
 				return
+			}
+		}
+		now := time.Now().Unix()
+		for i := range imported {
+			if imported[i].Created == 0 {
+				imported[i].Created = now
+			}
+			if imported[i].Updated == 0 {
+				imported[i].Updated = now
 			}
 		}
 		v.Entries = append(v.Entries, imported...)
@@ -355,6 +418,8 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 	case "change-master":
 		newPass := promptPass("New master password: ")
 		confirm := promptPass("Confirm new password: ")
+		defer zeroize(newPass)
+		defer zeroize(confirm)
 		if string(newPass) != string(confirm) {
 			fmt.Println("passwords do not match")
 			return
@@ -364,8 +429,111 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			return
 		}
 		newKey := deriveKey(newPass, salt)
+		defer zeroize(newKey)
 		saveOrDie(v, newKey)
 		fmt.Println("master password changed")
+
+	case "audit":
+		if len(v.Entries) == 0 {
+			fmt.Println("no entries to audit")
+			return
+		}
+		type row struct {
+			site, user, label string
+			bits              float64
+		}
+		var rows []row
+		for _, e := range v.Entries {
+			b := entropyBits(e.Pass)
+			rows = append(rows, row{e.Site, e.User, strengthLabel(b), b})
+		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i].bits < rows[j].bits })
+
+		weakCount := 0
+		fmt.Println("strength audit:")
+		for _, r := range rows {
+			marker := " "
+			if r.bits < 60 {
+				marker = "!"
+				weakCount++
+			}
+			fmt.Printf(" %s %-20s %-20s %-9s %5.1f bits\n", marker, r.site, r.user, r.label, r.bits)
+		}
+
+		reused := reusedPasswords(v.Entries)
+		if len(reused) > 0 {
+			fmt.Printf("\nreused passwords (%d):\n", len(reused))
+			n := 1
+			for _, group := range reused {
+				fmt.Printf(" [%d] shared by:\n", n)
+				for _, who := range group {
+					fmt.Printf("     %s\n", who)
+				}
+				n++
+			}
+		}
+		fmt.Printf("\nsummary: %d weak/fair, %d reused\n", weakCount, len(reused))
+
+	case "breach-check":
+		if len(v.Entries) == 0 {
+			fmt.Println("no entries to check")
+			return
+		}
+		// De-dupe so we don't query the same password twice.
+		seen := map[string]int{}
+		for _, e := range v.Entries {
+			seen[e.Pass] = 0
+		}
+		fmt.Println("checking against HIBP (k-anonymity, only 5-char hash prefix sent)...")
+		for pw := range seen {
+			count, err := hibpCheck(pw)
+			if err != nil {
+				fmt.Printf("  query failed: %s\n", err)
+				return
+			}
+			seen[pw] = count
+		}
+		breached := 0
+		for _, e := range v.Entries {
+			if c := seen[e.Pass]; c > 0 {
+				fmt.Printf("  ! %-20s %-20s seen in %d breaches\n", e.Site, e.User, c)
+				breached++
+			}
+		}
+		if breached == 0 {
+			fmt.Println("no breached passwords found")
+		} else {
+			fmt.Printf("\n%d breached password(s) — rotate them with `update`\n", breached)
+		}
+
+	case "expiry":
+		days := defaultExpiryDays
+		if len(args) >= 1 {
+			if n, err := strconv.Atoi(args[0]); err == nil && n > 0 {
+				days = n
+			}
+		}
+		stale := 0
+		unknown := 0
+		for _, e := range v.Entries {
+			age := entryAgeDays(e)
+			if age < 0 {
+				unknown++
+				continue
+			}
+			if age > days {
+				stale++
+				fmt.Printf("  ! %-20s %-20s %dd old\n", e.Site, e.User, age)
+			}
+		}
+		if stale == 0 {
+			fmt.Printf("no passwords older than %d days\n", days)
+		} else {
+			fmt.Printf("\n%d password(s) past %d-day expiry\n", stale, days)
+		}
+		if unknown > 0 {
+			fmt.Printf("(%d entries have no timestamp — pre-v5 data; update them to refresh)\n", unknown)
+		}
 
 	default:
 		usage()

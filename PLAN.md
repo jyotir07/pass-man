@@ -34,14 +34,14 @@
 - [x] Vault format versioning (`Vault{Version, Entries}` envelope) with legacy v3 array fallback
 - [x] Atomic writes (`tmp + rename`) so a crash mid-save can't corrupt the vault
 
-## v5 (planned) — security hardening
-- [ ] Auto-lock / re-prompt master password on idle
-- [ ] In-memory key zeroization after use
-- [ ] Password strength meter + audit (flag weak/reused passwords)
-- [ ] Offline HIBP k-anonymity breach check
-- [ ] Backup rotation (`data.json.bak`) on every save
+## v5 (done) — security hardening
+- [x] Auto-lock / re-prompt master password on idle
+- [x] In-memory key zeroization after use
+- [x] Password strength meter + audit (flag weak/reused passwords)
+- [x] Offline HIBP k-anonymity breach check
+- [x] Backup rotation (`data.json.bak`) on every save
 - [x] Don't accept `pass` as a CLI arg for `add` — prompt hidden (shell history leaks it)
-- [ ] Expiry reminders (flag passwords older than N days)
+- [x] Expiry reminders (flag passwords older than N days)
 
 ## v6 (planned) — usability
 - [ ] Interactive TUI / REPL mode (browse/search without re-entering master password)

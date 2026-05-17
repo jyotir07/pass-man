@@ -14,17 +14,22 @@ const (
 	lockFile     = ".lock"
 	maxAttempts  = 5
 	lockDuration = 5 * time.Minute
-	vaultVersion = 4
+	vaultVersion = 5
+	// defaultExpiryDays is the default age (in days) at which a password
+	// is flagged as stale by `list` / `expiry`.
+	defaultExpiryDays = 365
 )
 
 // Overridable for tests.
 var dataFile = "data.json"
 
 type Entry struct {
-	Site string `json:"site"`
-	User string `json:"user"`
-	Pass string `json:"pass"`
-	TOTP string `json:"totp,omitempty"`
+	Site    string `json:"site"`
+	User    string `json:"user"`
+	Pass    string `json:"pass"`
+	TOTP    string `json:"totp,omitempty"`
+	Created int64  `json:"created,omitempty"`
+	Updated int64  `json:"updated,omitempty"`
 }
 
 type Vault struct {
@@ -79,11 +84,31 @@ func saveVault(v *Vault, key []byte) error {
 	if err != nil {
 		return err
 	}
+	// Wipe the plaintext JSON buffer after we're done encrypting it —
+	// it contains every password in the vault.
+	defer zeroize(b)
 	enc, err := encrypt(b, key)
 	if err != nil {
 		return err
 	}
+	if err := rotateBackup(dataFile); err != nil {
+		// Backup failure is non-fatal — we'd rather save than refuse.
+		fmt.Fprintf(os.Stderr, "warning: backup rotation failed: %s\n", err)
+	}
 	return atomicWrite(dataFile, enc, 0600)
+}
+
+// rotateBackup copies the current vault file to <path>.bak before it is
+// overwritten. Missing source file is not an error (first save).
+func rotateBackup(path string) error {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return atomicWrite(path+".bak", src, 0600)
 }
 
 func atomicWrite(path string, data []byte, perm os.FileMode) error {

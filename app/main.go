@@ -38,6 +38,11 @@ func main() {
 	pass := promptPass("Master password: ")
 	key := deriveKey(pass, salt)
 
+	// Wipe the master password and derived key before the process exits so
+	// they're not recoverable from a core dump or swap file.
+	defer zeroize(pass)
+	defer zeroize(key)
+
 	vault, err := loadVault(key)
 	if err != nil {
 		recordFailure()

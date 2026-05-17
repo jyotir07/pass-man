@@ -7,14 +7,15 @@ import (
 	"testing"
 )
 
-func TestParseVaultV4(t *testing.T) {
+func TestParseVaultV4Legacy(t *testing.T) {
+	// A v4 envelope should still parse cleanly (forward-compat regression).
 	v4 := []byte(`{"version":4,"entries":[{"site":"x","user":"u","pass":"p"}]}`)
 	got, err := parseVault(v4)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 	if got.Version != 4 {
-		t.Errorf("version = %d, want 4", got.Version)
+		t.Errorf("version = %d, want 4 (raw value preserved)", got.Version)
 	}
 	if len(got.Entries) != 1 || got.Entries[0].Site != "x" {
 		t.Errorf("entries mismatch: %+v", got.Entries)

@@ -180,8 +180,18 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			fmt.Println("no entries")
 			return
 		}
+		showAge := len(args) >= 1 && args[0] == "--age"
 		for _, e := range v.Entries {
-			fmt.Printf("  %-20s %s\n", e.Site, e.User)
+			if showAge {
+				age := entryAgeDays(e)
+				ageStr := "unknown"
+				if age >= 0 {
+					ageStr = fmt.Sprintf("%dd", age)
+				}
+				fmt.Printf("  %-20s %-20s %s\n", e.Site, e.User, ageStr)
+			} else {
+				fmt.Printf("  %-20s %s\n", e.Site, e.User)
+			}
 		}
 
 	case "delete":
@@ -274,7 +284,11 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			}
 		}
 		pw := genPass(length)
-		v.Entries = append(v.Entries, Entry{Site: args[0], User: args[1], Pass: pw})
+		now := time.Now().Unix()
+		v.Entries = append(v.Entries, Entry{
+			Site: args[0], User: args[1], Pass: pw,
+			Created: now, Updated: now,
+		})
 		saveOrDie(v, key)
 		fmt.Printf("generated and saved (%d chars)\n", length)
 		copyAndWaitClear(pw)
@@ -326,6 +340,15 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			if err := json.Unmarshal(raw, &imported); err != nil {
 				fmt.Printf("invalid JSON: %s\n", err)
 				return
+			}
+		}
+		now := time.Now().Unix()
+		for i := range imported {
+			if imported[i].Created == 0 {
+				imported[i].Created = now
+			}
+			if imported[i].Updated == 0 {
+				imported[i].Updated = now
 			}
 		}
 		v.Entries = append(v.Entries, imported...)

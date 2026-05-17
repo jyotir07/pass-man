@@ -412,6 +412,8 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 	case "change-master":
 		newPass := promptPass("New master password: ")
 		confirm := promptPass("Confirm new password: ")
+		defer zeroize(newPass)
+		defer zeroize(confirm)
 		if string(newPass) != string(confirm) {
 			fmt.Println("passwords do not match")
 			return
@@ -421,8 +423,111 @@ func runCommand(cmd string, args []string, v *Vault, key, salt []byte) {
 			return
 		}
 		newKey := deriveKey(newPass, salt)
+		defer zeroize(newKey)
 		saveOrDie(v, newKey)
 		fmt.Println("master password changed")
+
+	case "audit":
+		if len(v.Entries) == 0 {
+			fmt.Println("no entries to audit")
+			return
+		}
+		type row struct {
+			site, user, label string
+			bits              float64
+		}
+		var rows []row
+		for _, e := range v.Entries {
+			b := entropyBits(e.Pass)
+			rows = append(rows, row{e.Site, e.User, strengthLabel(b), b})
+		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i].bits < rows[j].bits })
+
+		weakCount := 0
+		fmt.Println("strength audit:")
+		for _, r := range rows {
+			marker := " "
+			if r.bits < 60 {
+				marker = "!"
+				weakCount++
+			}
+			fmt.Printf(" %s %-20s %-20s %-9s %5.1f bits\n", marker, r.site, r.user, r.label, r.bits)
+		}
+
+		reused := reusedPasswords(v.Entries)
+		if len(reused) > 0 {
+			fmt.Printf("\nreused passwords (%d):\n", len(reused))
+			n := 1
+			for _, group := range reused {
+				fmt.Printf(" [%d] shared by:\n", n)
+				for _, who := range group {
+					fmt.Printf("     %s\n", who)
+				}
+				n++
+			}
+		}
+		fmt.Printf("\nsummary: %d weak/fair, %d reused\n", weakCount, len(reused))
+
+	case "breach-check":
+		if len(v.Entries) == 0 {
+			fmt.Println("no entries to check")
+			return
+		}
+		// De-dupe so we don't query the same password twice.
+		seen := map[string]int{}
+		for _, e := range v.Entries {
+			seen[e.Pass] = 0
+		}
+		fmt.Println("checking against HIBP (k-anonymity, only 5-char hash prefix sent)...")
+		for pw := range seen {
+			count, err := hibpCheck(pw)
+			if err != nil {
+				fmt.Printf("  query failed: %s\n", err)
+				return
+			}
+			seen[pw] = count
+		}
+		breached := 0
+		for _, e := range v.Entries {
+			if c := seen[e.Pass]; c > 0 {
+				fmt.Printf("  ! %-20s %-20s seen in %d breaches\n", e.Site, e.User, c)
+				breached++
+			}
+		}
+		if breached == 0 {
+			fmt.Println("no breached passwords found")
+		} else {
+			fmt.Printf("\n%d breached password(s) — rotate them with `update`\n", breached)
+		}
+
+	case "expiry":
+		days := defaultExpiryDays
+		if len(args) >= 1 {
+			if n, err := strconv.Atoi(args[0]); err == nil && n > 0 {
+				days = n
+			}
+		}
+		stale := 0
+		unknown := 0
+		for _, e := range v.Entries {
+			age := entryAgeDays(e)
+			if age < 0 {
+				unknown++
+				continue
+			}
+			if age > days {
+				stale++
+				fmt.Printf("  ! %-20s %-20s %dd old\n", e.Site, e.User, age)
+			}
+		}
+		if stale == 0 {
+			fmt.Printf("no passwords older than %d days\n", days)
+		} else {
+			fmt.Printf("\n%d password(s) past %d-day expiry\n", stale, days)
+		}
+		if unknown > 0 {
+			fmt.Printf("(%d entries have no timestamp — pre-v5 data; update them to refresh)\n", unknown)
+		}
 
 	default:
 		usage()

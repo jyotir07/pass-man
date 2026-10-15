@@ -19,8 +19,8 @@ func TestZeroize(t *testing.T) {
 }
 
 func TestEntropyBitsClassesIncreasePool(t *testing.T) {
-	lower := entropyBits("aaaaaaaa")     // 8 * log2(26)
-	mixed := entropyBits("Aa1!Aa1!")     // 8 * log2(94)
+	lower := entropyBits("aaaaaaaa") // 8 * log2(26)
+	mixed := entropyBits("Aa1!Aa1!") // 8 * log2(94)
 	if mixed <= lower {
 		t.Fatalf("mixed (%f) should beat lower-only (%f)", mixed, lower)
 	}

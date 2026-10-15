@@ -3,3 +3,5 @@ node_modules/
 package-lock.json
 ARCHITECTURE.txt
 *.exe
+.salt
+*_passes.json

@@ -5,3 +5,4 @@ ARCHITECTURE.txt
 *.exe
 .salt
 *_passes.json
+package.json

@@ -1,5 +1,4 @@
 # passman
-
 A minimal CLI password manager written in Go. All passwords are encrypted with AES-256-GCM and locked behind a master password.
 
 ---
@@ -233,3 +232,5 @@ master password changed
 ## Roadmap
 
 See [PLAN.md](PLAN.md).
+
+<!-- signoff checking -->

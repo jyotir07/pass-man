@@ -43,7 +43,17 @@
 - [x] Don't accept `pass` as a CLI arg for `add` — prompt hidden (shell history leaks it)
 - [x] Expiry reminders (flag passwords older than N days)
 
-## v6 (planned) — usability
+## v6 (planned) — storage core
+- [ ] Resolve vault path from `PASSMAN_VAULT`, falling back to `os.UserConfigDir()/passman/` (not CWD)
+- [ ] `loadVault`: treat only `os.IsNotExist` as a fresh vault; fail loudly on any other read error
+- [ ] Exclusive inter-process lock (`vault.lock`) held across load → modify → save
+- [ ] Self-describing vault header: magic, format version, KDF id + Argon2 params, salt, nonce
+- [ ] Bind the header as GCM associated data so tampering with params breaks decryption
+- [ ] Retire `.salt` (legacy fallback: no magic → old format + `.salt`)
+- [ ] Raise default Argon2id cost; `change-master` re-derives with current defaults
+- [ ] Report a corrupted vault separately from a wrong master password
+
+## v7 (planned) — usability
 - [ ] Interactive TUI / REPL mode (browse/search without re-entering master password)
 - [ ] Tags / categories and `list --tag work`
 - [ ] Per-entry `notes` and `url` fields

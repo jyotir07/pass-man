@@ -224,6 +224,7 @@ master password changed
 ## Important
 
 - **Back up both `data.json` and `.salt`** — losing `.salt` means you cannot decrypt your vault, even with the correct master password.
+- `data.json` and `.salt` are read from and created in the **current directory**. Always run passman from the same folder, or it will start a new, empty vault.
 - If you forget your master password, there is no recovery.
 - `data.json` from v1 (plaintext) is not compatible — re-add entries after upgrading.
 
@@ -231,6 +232,6 @@ master password changed
 
 ## Roadmap
 
-See [PLAN.md](PLAN.md).
+See [PLAN.md](PLAN.md). Next up (v6): a fixed vault location, safe concurrent access, and a single self-contained vault file (no separate `.salt`).
 
 <!-- signoff checking -->

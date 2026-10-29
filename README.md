@@ -207,9 +207,7 @@ master password changed
 ```
 
 ---
-
 ## Security
-
 | What | How |
 |------|-----|
 | Encryption | AES-256-GCM |

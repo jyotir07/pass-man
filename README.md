@@ -231,5 +231,3 @@ master password changed
 ## Roadmap
 
 See [PLAN.md](PLAN.md). Next up (v6): a fixed vault location, safe concurrent access, and a single self-contained vault file (no separate `.salt`).
-
-<!-- signoff checking -->

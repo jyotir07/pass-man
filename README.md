@@ -207,6 +207,7 @@ master password changed
 ```
 
 ---
+
 ## Security
 | What | How |
 |------|-----|
